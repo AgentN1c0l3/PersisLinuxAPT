@@ -30,6 +30,9 @@ Located in /etc/cron.d/daily_update
 Reverse Shell via APT Hook: This method leverages the frequent use of apt-get update to execute a reverse shell command, making it less noticeable.
 Persistence with Cron: The cron job ensures the reverse shell remains active by running the script daily, even if the APT hook is disrupted.
 
+## Note
+Root Privileges Required: This script must be run as root to ensure it can create the necessary files and set up the cron job properly.
+
 ## Removal Instructions
 To remove the APT hook:
 ``rm -f /etc/apt/apt.conf.d/99-system-maintenance``
